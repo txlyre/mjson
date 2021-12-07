@@ -1,0 +1,131 @@
+json ::= JNull
+       | JBool bool
+       | JNum num
+       | JString string
+       | JArray [json]
+       | JObject [(string, json)]
+
+json_token ::= TOSB
+             | TCSB
+             | TOCB
+             | TCCB
+             | TCOLON
+             | TCOMMA
+             | TSTRING string
+             | TNUM num
+             | TNAME string
+
+jsonParseEscape :: char -> char
+jsonParseEscape 'n' = '\n'
+jsonParseEscape 'r' = '\r'
+jsonParseEscape 't' = '\t'
+jsonParseEscape c   = c
+
+jsonTokenizeString :: bool -> string -> string -> (string, string)
+jsonTokenizeString True  _ ""        = error "unterminated string"
+jsonTokenizeString True  s (x   :xs) = jsonTokenizeString False (s <: jsonParseEscape x) xs
+jsonTokenizeString False s ""        = error "unterminated string"
+jsonTokenizeString False s ('\\':xs) = jsonTokenizeString True s xs
+jsonTokenizeString False s ('"' :xs) = (s, xs)
+jsonTokenizeString False s (x   :xs) = jsonTokenizeString False (s <: x) xs
+
+jsonTokenizeNumber :: bool -> string -> string -> (string, string)
+jsonTokenizeNumber d    s ""           = (s, "")
+jsonTokenizeNumber True s (r = '.':xs) = error "extra ."
+jsonTokenizeNumber d    s (r =   x:xs) = jsonTokenizeNumber (d || x = '.') (s <: x) xs, isDigit? x || x = '.'
+                                       = (s, r)
+
+jsonTokenizeName :: string -> string -> (string, string)
+jsonTokenizeName s ""         = (s, "")
+jsonTokenizeName s (r = x:xs) = jsonTokenizeName (s <: x) xs, isAlpha? x
+                              = (s, r)
+
+jsonTokenize :: string -> [json_token]
+jsonTokenize ""         = []
+jsonTokenize ('['  :xs) = TOSB   : jsonTokenize xs
+jsonTokenize (']'  :xs) = TCSB   : jsonTokenize xs
+jsonTokenize ('{'  :xs) = TOCB   : jsonTokenize xs
+jsonTokenize ('}'  :xs) = TCCB   : jsonTokenize xs
+jsonTokenize (':'  :xs) = TCOLON : jsonTokenize xs
+jsonTokenize (','  :xs) = TCOMMA : jsonTokenize xs
+jsonTokenize ('"'  :xs) = TSTRING sl : jsonTokenize sr
+where
+  (sl, sr) = jsonTokenizeString False "" xs
+jsonTokenize (s = x:xs) = TNUM (parseNum nl) : jsonTokenize nr, isDigit? x
+                        = TNAME al : jsonTokenize ar, isAlpha? x
+                        = jsonTokenize xs, isSpace? x
+                        = error $ "unexpected character: " <: x
+where
+  (nl, nr) = jsonTokenizeNumber False "" s 
+  (al, ar) = jsonTokenizeName "" s
+
+jsonParseArray :: [json] -> [json_token] -> ([json], [json_token])
+jsonParseArray _  []        = error "missing ]"
+jsonParseArray js (TCSB:ts) = (js, ts)
+jsonParseArray js ts        = jsonParseArray (js <: el) rst
+where
+  (el, er) = jsonParseExpression ts
+  rst = case er of (TCOMMA:TCSB:_) -> error "extra ,"
+                 | (TCOMMA     :r) -> r
+                 | (t = TCSB   :_) -> t
+                 | (t = TCCB   :_) -> t
+                 | _               -> error "unexpected token"              
+
+jsonParseObject :: [(string, json)] -> [json_token] -> ([(string, json)], [json_token])
+jsonParseObject _  []        = error "missing }"
+jsonParseObject js (TCCB:ts) = (js, ts)
+jsonParseObject js ts = jsonParseObject (js <: (n, vl)) rst
+where
+  (xr, xl) = jsonParseExpression ts
+  n        = case xr of JString s       -> s
+                      | _               -> error "expected string"
+  (vl, vr) = case xl of (TCOLON     :r) -> jsonParseExpression r       
+                      | _               -> error "missing :"        
+  rst = case vr of      (TCOMMA:TCCB:_) -> error "extra ,"
+                      | (TCOMMA     :r) -> r
+                      | (t = TCSB   :_) -> t
+                      | (t = TCCB   :_) -> t
+                      | _               -> error "unexpected token"              
+  
+jsonParseExpression :: [json_token] -> (json, [json_token])
+jsonParseExpression (TOSB     :ts) = (JArray al, ar)
+where
+  (al, ar) = jsonParseArray [] ts
+jsonParseExpression (TOCB     :ts) = (JObject ol, or)
+where
+  (ol, or) = jsonParseObject [] ts
+jsonParseExpression (TSTRING s:ts) = (JString s, ts)
+jsonParseExpression (TNUM    n:ts) = (JNum n, ts) 
+jsonParseExpression (TNAME   n:ts) = case n of "true"  -> (JBool True, ts)
+                                             | "false" -> (JBool False, ts)
+                                             | "null"  -> (JNull, ts)
+                                             | _       -> error $ "illegal name: " ++ n
+jsonParseExpression _              = error "unexpected token"
+
+jsonParse :: [json_token] -> json
+jsonParse (toks = t:ts) = if not $ empty? tokens_left then 
+                            error "unconsumed input"
+                          else res, t = TOSB || t = TOCB
+                        = error "unexpected token"
+where
+  (res, tokens_left) = jsonParseExpression toks
+jsonParse _             = error "empty document"
+
+jsonShowPair :: (string, json) -> string
+jsonShowPair (n, v) = "\"" ++ n ++ "\"" ++ ": " ++ jsonShow v
+
+jsonShow :: json -> string
+jsonShow JNull            = "null"
+jsonShow (JBool   b)      = case b of True  -> "true"
+                                    | False -> "false"
+jsonShow (JNum    n)      = show n
+jsonShow (JString s)      = "\"" ++ s ++ "\""
+jsonShow (JArray  [])     = "[]"
+jsonShow (JArray  [x])    = "[" ++ jsonShow x ++ "]"
+jsonShow (JArray  (x:xs)) = "[" ++ foldl (l -> r -> l ++ ", " ++ jsonShow r) (jsonShow x) xs ++ "]"
+jsonShow (JObject [])     = "{}"
+jsonShow (JObject [p])    = "{" ++ jsonShowPair p ++ "}"
+jsonShow (JObject (p:ps)) = "{" ++ foldl (l -> r -> l ++ ", " ++ jsonShowPair r) (jsonShowPair p) ps ++ "}"
+                        
+jsonRead :: string -> json
+jsonRead = jsonParse . jsonTokenize
