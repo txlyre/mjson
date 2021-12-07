@@ -1,0 +1,6 @@
+{
+  "name": "mjson",
+  "description": "Dumb JSON parser.",
+  "version": "0.1",
+  "dependencies": []
+}
