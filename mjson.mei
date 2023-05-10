@@ -132,3 +132,42 @@ jsonShow (JObject (p:ps)) = "{" ++ foldl (l -> r -> l ++ ", " ++ jsonShowPair r)
                         
 jsonRead :: string -> json
 jsonRead = jsonParse . jsonTokenize
+
+jsonFromBool :: json -> bool
+jsonFromBool (JBool b) = b
+
+jsonFromNumber :: json -> num
+jsonFromNumber (JNum n) = n
+
+jsonFromString :: json -> string
+jsonFromString (JString s) = s
+
+jsonArrayMap :: (json -> *) -> json -> [*]
+jsonArrayMap f (JArray a) = map f a
+
+jsonObjectLookup :: string -> json -> maybe json
+jsonObjectLookup key (JObject data) = lookup key data
+
+jsonNull? :: json -> bool
+jsonNull? (JNull) = True
+jsonNull? _       = False
+
+jsonBool? :: json -> bool
+jsonBool? (JBool _) = True
+jsonBool? _         = False
+
+jsonNumber? :: json -> bool
+jsonNumber? (JNum _) = True
+jsonNumber? _        = False
+
+jsonString? :: json -> bool
+jsonString? (JString _) = True
+jsonString? _           = False
+
+jsonArray? :: json -> bool
+jsonArray? (JArray _) = True
+jsonArray? _          = False
+
+jsonObject? :: json -> bool
+jsonObject? (JObject _) = True
+jsonObject? _           = False
