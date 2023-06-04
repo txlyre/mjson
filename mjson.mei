@@ -142,7 +142,7 @@ jsonFromNumber (JNum n) = n
 jsonFromString :: json -> string
 jsonFromString (JString s) = s
 
-jsonArrayMap :: (json -> *) -> json -> [*]
+jsonArrayMap :: (json -> a) -> json -> [a]
 jsonArrayMap f (JArray a) = map f a
 
 jsonObjectLookup :: string -> json -> maybe json
